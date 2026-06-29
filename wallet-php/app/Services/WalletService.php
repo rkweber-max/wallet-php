@@ -9,6 +9,16 @@ use Illuminate\Support\Facades\DB;
 
 class WalletService
 {
+    public function createWallet(string $userId): Wallet
+    {
+        $wallet = Wallet::create([
+            'user_id' => $userId,
+            'balance' => 0,
+        ]);
+
+        return $wallet;
+    }
+
     public function deposit(Wallet $wallet, int $amount): Wallet
     {
         $this->validateAmount($amount);
