@@ -10,3 +10,4 @@ Route::get('/user', function (Request $request) {
 
 
 Route::post('/wallets', [WalletController::class, 'store']);
+Route::get('/wallets', [WalletController::class, 'index']);

@@ -19,6 +19,11 @@ class WalletService
         return $wallet;
     }
 
+    public function getWallets()
+    {
+        return Wallet::all();
+    }
+
     public function deposit(Wallet $wallet, int $amount): Wallet
     {
         $this->validateAmount($amount);
