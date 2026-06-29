@@ -8,6 +8,7 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-
-Route::post('/wallets', [WalletController::class, 'store']);
-Route::get('/wallets', [WalletController::class, 'index']);
+Route::apiResource('wallets', WalletController::class)->only(['store', 'index', 'show']);
+Route::get('/wallets/{wallet}/transactions', [WalletController::class, 'getTransactions']);
+Route::post('/wallets/{wallet}/deposit', [WalletController::class, 'deposit']);
+Route::post('/wallets/{wallet}/withdraw', [WalletController::class, 'withdraw']);
