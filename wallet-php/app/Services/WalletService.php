@@ -39,16 +39,18 @@ class WalletService
         $this->validateAmount($amount);
 
         return DB::transaction(function () use ($wallet, $amount) {
-            $wallet->balance += $amount;
-            $wallet->save();
+            $lockWallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
 
-            $wallet->transactions()->create([
+            $lockWallet->balance += $amount;
+            $lockWallet->save();
+
+            $lockWallet->transactions()->create([
                 'type' => TransactionType::DEPOSIT->value,
                 'amount' => $amount,
-                'balance_after' => $wallet->balance,
+                'balance_after' => $lockWallet->balance,
             ]);
 
-            return $wallet;
+            return $lockWallet;
         });
     }
 
@@ -57,20 +59,22 @@ class WalletService
         $this->validateAmount($amount);
 
         return DB::transaction(function () use ($wallet, $amount) {
-            if ($wallet->balance < $amount) {
+            $lockWallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
+
+            if ($lockWallet->balance < $amount) {
                 throw new InsufficientBalanceException('Insufficient balance for withdrawal.');
             }
 
-            $wallet->balance -= $amount;
-            $wallet->save();
+            $lockWallet->balance -= $amount;
+            $lockWallet->save();
 
-            $wallet->transactions()->create([
+            $lockWallet->transactions()->create([
                 'type' => TransactionType::WITHDRAWAL->value,
                 'amount' => $amount,
-                'balance_after' => $wallet->balance,
+                'balance_after' => $lockWallet->balance,
             ]);
 
-            return $wallet;
+            return $lockWallet;
         });
     }
 
