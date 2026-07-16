@@ -1,0 +1,308 @@
+openapi: 3.1.0
+
+info:
+  title: Wallet Service API
+  description: |
+    API REST para uma carteira digital.
+
+    Todas as operações financeiras são atômicas (ACID) e o saldo é protegido
+    contra condições de corrida (race conditions) por meio de lock pessimista.
+
+    ## Sobre valores monetários
+    Todos os valores monetários trafegam em **centavos** (inteiros).
+    Exemplo: `5000` representa R$ 50,00. Nunca use ponto flutuante.
+
+    ## Sobre identificadores
+    Todos os identificadores são **UUID** (versão 7).
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api
+    description: Ambiente de desenvolvimento local (Docker)
+
+tags:
+  - name: Wallets
+    description: Operações de gerenciamento e consulta de carteiras
+  - name: Transactions
+    description: Operações financeiras e histórico
+
+paths:
+  /wallets:
+    post:
+      tags: [Wallets]
+      summary: Cria uma nova carteira
+      description: Cria uma carteira com saldo inicial zero, associada a um usuário existente.
+      operationId: createWallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWalletRequest'
+      responses:
+        '201':
+          description: Carteira criada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Wallet'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      tags: [Wallets]
+      summary: Lista todas as carteiras
+      operationId: listWallets
+      responses:
+        '200':
+          description: Lista de carteiras
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Wallet'
+
+  /wallets/{id}:
+    get:
+      tags: [Wallets]
+      summary: Busca uma carteira específica
+      operationId: getWallet
+      parameters:
+        - $ref: '#/components/parameters/WalletId'
+      responses:
+        '200':
+          description: Dados da carteira
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Wallet'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /wallets/{id}/deposit:
+    post:
+      tags: [Transactions]
+      summary: Realiza um depósito
+      description: |
+        Adiciona fundos à carteira e registra uma transação de depósito.
+        A operação é atômica: ou o saldo é atualizado e a transação registrada,
+        ou nada acontece.
+      operationId: deposit
+      parameters:
+        - $ref: '#/components/parameters/WalletId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmountRequest'
+      responses:
+        '200':
+          description: Depósito realizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Wallet'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /wallets/{id}/withdraw:
+    post:
+      tags: [Transactions]
+      summary: Realiza um saque
+      description: |
+        Remove fundos da carteira, validando saldo suficiente, e registra uma
+        transação de saque. A validação de saldo ocorre sob lock pessimista para
+        prevenir condições de corrida. Se o saldo for insuficiente, a operação é
+        revertida (rollback) e nenhum estado é alterado.
+      operationId: withdraw
+      parameters:
+        - $ref: '#/components/parameters/WalletId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmountRequest'
+      responses:
+        '200':
+          description: Saque realizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Wallet'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            Erro de validação (valor inválido) ou saldo insuficiente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              examples:
+                saldoInsuficiente:
+                  summary: Saldo insuficiente
+                  value:
+                    message: Insufficient balance for withdrawal.
+                valorInvalido:
+                  summary: Valor inválido
+                  value:
+                    message: The amount field must be at least 1.
+
+  /wallets/{id}/transactions:
+    get:
+      tags: [Transactions]
+      summary: Consulta o histórico de transações
+      description: Retorna todas as transações da carteira, do registro mais antigo ao mais recente.
+      operationId: getTransactions
+      parameters:
+        - $ref: '#/components/parameters/WalletId'
+      responses:
+        '200':
+          description: Histórico de transações
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    WalletId:
+      name: id
+      in: path
+      required: true
+      description: Identificador (UUID) da carteira
+      schema:
+        type: string
+        format: uuid
+      example: 019f162b-6802-733b-bcb0-da966c597334
+
+  schemas:
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único da carteira (UUID v7)
+          example: 019f162b-6802-733b-bcb0-da966c597334
+        balance_in_cents:
+          type: integer
+          description: Saldo atual em centavos
+          example: 5000
+      required: [id, balance_in_cents]
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único da transação (UUID v7)
+          example: 019f1606-a2b8-723d-920a-70092d1a2fb9
+        type:
+          type: string
+          description: Tipo da transação
+          enum: [deposit, withdrawal]
+          example: deposit
+        amount:
+          type: integer
+          description: Valor da transação em centavos
+          example: 5000
+        balance_after_in_cents:
+          type: integer
+          description: Saldo resultante logo após a transação, em centavos (running balance)
+          example: 5000
+        created_at:
+          type: string
+          format: date-time
+          description: Momento em que a transação ocorreu (imutável)
+          example: 2026-06-30T00:56:01Z
+      required: [id, type, amount, balance_after_in_cents, created_at]
+
+    CreateWalletRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Identificador do usuário dono da carteira. Deve existir.
+          example: 019f1606-46e3-7395-99e6-a87ec6140493
+      required: [user_id]
+
+    AmountRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          description: Valor da operação em centavos (mínimo 1)
+          example: 5000
+      required: [amount]
+
+    MessageError:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Mensagem descrevendo o erro
+      required: [message]
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: The given data was invalid.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            amount:
+              - The amount field is required.
+      required: [message]
+
+  responses:
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageError'
+          example:
+            message: No query results for model [App\Models\Wallet].
+
+    ValidationError:
+      description: Erro de validação nos dados enviados
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
