@@ -6,6 +6,7 @@ use App\Exceptions\InsufficientBalanceException;
 use App\Models\Wallet;
 use App\TransactionType;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class WalletService
 {
@@ -14,6 +15,12 @@ class WalletService
         $wallet = Wallet::create([
             'user_id' => $userId,
             'balance' => 0,
+        ]);
+
+        Log::info('Wallet created', [
+            'wallet_id' => $wallet->id,
+            'user_id' => $userId,
+            'balance' => $wallet->balance,
         ]);
 
         return $wallet;
@@ -44,10 +51,17 @@ class WalletService
             $lockWallet->balance += $amount;
             $lockWallet->save();
 
-            $lockWallet->transactions()->create([
+            $transaction = $lockWallet->transactions()->create([
                 'type' => TransactionType::DEPOSIT->value,
                 'amount' => $amount,
                 'balance_after' => $lockWallet->balance,
+            ]);
+
+            Log::info('Deposit completed', [
+                'wallet_id' => $lockWallet->id,
+                'amount' => $amount,
+                'balance_after' => $lockWallet->balance,
+                'transaction_id' => $transaction->id,
             ]);
 
             return $lockWallet;
@@ -62,16 +76,29 @@ class WalletService
             $lockWallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
 
             if ($lockWallet->balance < $amount) {
+                Log::warning('Insufficient balance for withdrawal', [
+                    'wallet_id' => $lockWallet->id,
+                    'requested_amount' => $amount,
+                    'current_balance' => $lockWallet->balance,
+                ]);
+
                 throw new InsufficientBalanceException('Insufficient balance for withdrawal.');
             }
 
             $lockWallet->balance -= $amount;
             $lockWallet->save();
 
-            $lockWallet->transactions()->create([
+            $transaction = $lockWallet->transactions()->create([
                 'type' => TransactionType::WITHDRAWAL->value,
                 'amount' => $amount,
                 'balance_after' => $lockWallet->balance,
+            ]);
+
+            Log::info('Withdrawal completed', [
+                'wallet_id' => $lockWallet->id,
+                'amount' => $amount,
+                'balance_after' => $lockWallet->balance,
+                'transaction_id' => $transaction->id,
             ]);
 
             return $lockWallet;
