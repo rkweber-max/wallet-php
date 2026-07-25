@@ -8,7 +8,6 @@ use App\Http\Resources\TransactionResource;
 use App\Http\Resources\WalletResource;
 use App\Models\Wallet;
 use App\Services\WalletService;
-use Illuminate\Support\Facades\Log;
 
 class WalletController extends Controller
 {
