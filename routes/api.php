@@ -9,10 +9,12 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::apiResource('wallets', WalletController::class)->only(['store', 'index', 'show']);
-Route::get('/wallets/{wallet}/transactions', [WalletController::class, 'getTransactions']);
-Route::post('/wallets/{wallet}/deposit', [WalletController::class, 'deposit']);
-Route::post('/wallets/{wallet}/withdraw', [WalletController::class, 'withdraw']);
+Route::middleware('auth:api')->group(function () {
+    Route::apiResource('wallets', WalletController::class)->only(['store', 'index', 'show']);
+    Route::get('/wallets/{wallet}/transactions', [WalletController::class, 'getTransactions']);
+    Route::post('/wallets/{wallet}/deposit', [WalletController::class, 'deposit']);
+    Route::post('/wallets/{wallet}/withdraw', [WalletController::class, 'withdraw']);
+});
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
