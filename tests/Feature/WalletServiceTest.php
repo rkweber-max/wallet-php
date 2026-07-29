@@ -50,8 +50,8 @@ test('race condition: two simultaneous withdrawals, only one succeeds', function
     $command = base_path('artisan');
 
     $cmd = sprintf(
-        'DB_DATABASE=wallet_test php %s wallet:withdraw %s 10000 & ' .
-            'DB_DATABASE=wallet_test php %s wallet:withdraw %s 10000 & ' .
+        'APP_ENV=testing php %s wallet:withdraw %s 10000 & ' .
+            'APP_ENV=testing php %s wallet:withdraw %s 10000 & ' .
             'wait',
         $command,
         $walletId,
@@ -60,6 +60,8 @@ test('race condition: two simultaneous withdrawals, only one succeeds', function
     );
 
     exec($cmd, $output, $returnCode);
+
+    dump($output);
 
     expect($wallet->fresh()->balance)->toBe(0);
     expect($wallet->fresh()->transactions()->count())->toBe(1);
