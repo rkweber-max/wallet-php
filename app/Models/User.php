@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Str;
+use Override;
 
 class User extends Authenticatable
 {
@@ -16,11 +17,16 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name',
+        'email',
+        'password'
     ];
+
+    protected $hidden = ['password'];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'password'   => 'hashed'
     ];
 
     public function newUniqueId(): string
