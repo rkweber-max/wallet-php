@@ -8,8 +8,17 @@ use Illuminate\Foundation\Testing\DatabaseTruncation;
 
 uses(DatabaseTruncation::class);
 
+function createTestUser(): User
+{
+    return User::create([
+        'name' => 'Test User',
+        'email' => 'test-' . uniqid() . '@example.com',
+        'password' => bcrypt('secret'),
+    ]);
+}
+
 test('increases balance on deposit', function () {
-    $user = User::create(['name' => 'Test User']);
+    $user = createTestUser();
 
     $wallet = Wallet::create([
         'user_id' => $user->id,
@@ -23,7 +32,7 @@ test('increases balance on deposit', function () {
 });
 
 test('decreases balance on withdrawal', function () {
-    $user = User::create(['name' => 'Test User']);
+    $user = createTestUser();
 
     $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 10000]);
 
@@ -34,7 +43,7 @@ test('decreases balance on withdrawal', function () {
 });
 
 test('race condition: two simultaneous withdrawals, only one succeeds', function () {
-    $user = User::create(['name' => 'Test User']);
+    $user = createTestUser();
     $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 10000]);
     $walletId = $wallet->id;
 
@@ -57,7 +66,7 @@ test('race condition: two simultaneous withdrawals, only one succeeds', function
 });
 
 test('throws exception when withdrawing more than available balance', function () {
-    $user = User::create(['name' => 'Test User']);
+    $user = createTestUser();
 
     $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 2000]);
 
@@ -67,7 +76,7 @@ test('throws exception when withdrawing more than available balance', function (
 });
 
 test('does not change balance or create transaction when withdrawal fails', function () {
-    $user = User::create(['name' => 'Test User']);
+    $user = createTestUser();
     $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 2000]);
     $walletService = new WalletService();
 
@@ -81,7 +90,7 @@ test('does not change balance or create transaction when withdrawal fails', func
 });
 
 test('records the transaction on deposit', function () {
-    $user = User::create(['name' => 'Test User']);
+    $user = createTestUser();
     $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 0]);
     $walletService = new WalletService();
 
