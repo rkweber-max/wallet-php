@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\WalletController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -12,3 +13,6 @@ Route::apiResource('wallets', WalletController::class)->only(['store', 'index', 
 Route::get('/wallets/{wallet}/transactions', [WalletController::class, 'getTransactions']);
 Route::post('/wallets/{wallet}/deposit', [WalletController::class, 'deposit']);
 Route::post('/wallets/{wallet}/withdraw', [WalletController::class, 'withdraw']);
+
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
