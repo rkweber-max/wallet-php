@@ -3,10 +3,22 @@ openapi: 3.1.0
 info:
   title: Wallet Service API
   description: |
-    API REST para uma carteira digital.
+    API REST para uma carteira digital, com autenticação via JWT.
 
     Todas as operações financeiras são atômicas (ACID) e o saldo é protegido
     contra condições de corrida (race conditions) por meio de lock pessimista.
+
+    ## Autenticação
+    A API usa **JSON Web Tokens (JWT)**. O fluxo é:
+    1. `POST /register` ou `POST /login` retornam um token de acesso.
+    2. Envie esse token no cabeçalho `Authorization: Bearer <token>` em todas as
+       rotas protegidas.
+    3. O token de acesso tem vida curta; use `POST /refresh` para obter um novo
+       sem refazer o login, e `POST /logout` para invalidá-lo.
+
+    As rotas de carteira operam **sempre sobre o usuário autenticado**: uma
+    carteira pertence a quem a criou, e cada usuário só enxerga as próprias
+    carteiras.
 
     ## Sobre valores monetários
     Todos os valores monetários trafegam em **centavos** (inteiros).
@@ -14,31 +26,136 @@ info:
 
     ## Sobre identificadores
     Todos os identificadores são **UUID** (versão 7).
-  version: 1.0.0
+  version: 2.0.0
 
 servers:
   - url: http://localhost:8000/api
     description: Ambiente de desenvolvimento local (Docker)
 
 tags:
+  - name: Auth
+    description: Registro, login e gerenciamento de sessão via JWT
   - name: Wallets
     description: Operações de gerenciamento e consulta de carteiras
   - name: Transactions
     description: Operações financeiras e histórico
 
+security:
+  - bearerAuth: []
+
 paths:
-  /wallets:
+  /register:
     post:
-      tags: [Wallets]
-      summary: Cria uma nova carteira
-      description: Cria uma carteira com saldo inicial zero, associada a um usuário existente.
-      operationId: createWallet
+      tags: [Auth]
+      summary: Registra um novo usuário
+      description: Cria um usuário e retorna um token de acesso já autenticado.
+      operationId: register
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateWalletRequest'
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Usuário criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+                    description: Token JWT de acesso
+                    example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Autentica um usuário
+      description: |
+        Valida as credenciais e retorna um token de acesso. Limitado a
+        5 tentativas por minuto por IP (proteção contra força bruta).
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Autenticado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Credenciais inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Invalid credentials
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /refresh:
+    post:
+      tags: [Auth]
+      summary: Renova o token de acesso
+      description: |
+        Gera um novo token de acesso a partir do token atual (enviado no
+        cabeçalho `Authorization`), sem exigir novo login.
+      operationId: refresh
+      responses:
+        '200':
+          description: Novo token gerado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Encerra a sessão
+      description: Invalida o token atual, impedindo seu uso posterior.
+      operationId: logout
+      responses:
+        '200':
+          description: Logout realizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Successfully logged out
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /wallets:
+    post:
+      tags: [Wallets]
+      summary: Cria uma nova carteira
+      description: |
+        Cria uma carteira com saldo inicial zero para o **usuário autenticado**.
+        O dono é determinado pelo token; não é necessário (nem possível) informar
+        o usuário no corpo da requisição.
+      operationId: createWallet
       responses:
         '201':
           description: Carteira criada com sucesso
@@ -49,11 +166,12 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Wallet'
-        '422':
-          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     get:
       tags: [Wallets]
-      summary: Lista todas as carteiras
+      summary: Lista as carteiras do usuário autenticado
+      description: Retorna apenas as carteiras pertencentes ao usuário autenticado.
       operationId: listWallets
       responses:
         '200':
@@ -67,6 +185,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Wallet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /wallets/{id}:
     get:
@@ -85,6 +205,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Wallet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -115,6 +237,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Wallet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -148,6 +272,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Wallet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -187,10 +313,19 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Envie o token JWT no cabeçalho `Authorization: Bearer <token>`."
+
   parameters:
     WalletId:
       name: id
@@ -203,6 +338,23 @@ components:
       example: 019f162b-6802-733b-bcb0-da966c597334
 
   schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único do usuário (UUID v7)
+          example: 019f1606-46e3-7395-99e6-a87ec6140493
+        name:
+          type: string
+          example: Rodrigo
+        email:
+          type: string
+          format: email
+          example: rodrigo@example.com
+      required: [id, name, email]
+
     Wallet:
       type: object
       properties:
@@ -230,7 +382,7 @@ components:
           description: Tipo da transação
           enum: [deposit, withdrawal]
           example: deposit
-        amount:
+        amount_in_cents:
           type: integer
           description: Valor da transação em centavos
           example: 5000
@@ -243,17 +395,46 @@ components:
           format: date-time
           description: Momento em que a transação ocorreu (imutável)
           example: 2026-06-30T00:56:01Z
-      required: [id, type, amount, balance_after_in_cents, created_at]
+      required: [id, type, amount_in_cents, balance_after_in_cents, created_at]
 
-    CreateWalletRequest:
+    RegisterRequest:
       type: object
       properties:
-        user_id:
+        name:
           type: string
-          format: uuid
-          description: Identificador do usuário dono da carteira. Deve existir.
-          example: 019f1606-46e3-7395-99e6-a87ec6140493
-      required: [user_id]
+          example: Rodrigo
+        email:
+          type: string
+          format: email
+          example: rodrigo@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: password123
+      required: [name, email, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: rodrigo@example.com
+        password:
+          type: string
+          format: password
+          example: password123
+      required: [email, password]
+
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token JWT de acesso
+          example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+      required: [token]
 
     AmountRequest:
       type: object
@@ -286,11 +467,20 @@ components:
             items:
               type: string
           example:
-            amount:
-              - The amount field is required.
+            email:
+              - The email has already been taken.
       required: [message]
 
   responses:
+    Unauthorized:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageError'
+          example:
+            message: Unauthenticated.
+
     NotFound:
       description: Recurso não encontrado
       content:
@@ -299,6 +489,15 @@ components:
             $ref: '#/components/schemas/MessageError'
           example:
             message: No query results for model [App\Models\Wallet].
+
+    TooManyRequests:
+      description: Muitas requisições (limite de tentativas excedido)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageError'
+          example:
+            message: Too Many Attempts.
 
     ValidationError:
       description: Erro de validação nos dados enviados
