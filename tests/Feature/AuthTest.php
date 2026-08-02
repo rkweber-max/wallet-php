@@ -148,7 +148,6 @@ test('protected route with a valid token succeeds', function () {
 */
 
 test('refresh returns a new token', function () {
-    dump(config('jwt.secret')); 
     $user = makeUser();
     $token = auth('api')->login($user);
 

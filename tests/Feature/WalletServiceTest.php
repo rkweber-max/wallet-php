@@ -61,8 +61,6 @@ test('race condition: two simultaneous withdrawals, only one succeeds', function
 
     exec($cmd, $output, $returnCode);
 
-    dump($output);
-
     expect($wallet->fresh()->balance)->toBe(0);
     expect($wallet->fresh()->transactions()->count())->toBe(1);
 });
