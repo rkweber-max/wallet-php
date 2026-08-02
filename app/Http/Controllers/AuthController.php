@@ -36,4 +36,18 @@ class AuthController extends Controller
 
         return response()->json(['token' => $token]);
     }
+
+    public function refresh()
+    {
+        $token = JWTAuth::refresh();
+
+        return response()->json(['token' => $token]);
+    }
+
+    public function logout()
+    {
+        JWTAuth::invalidate();
+
+        return response()->json(['message' => 'Successfully logged out']);
+    }
 }
